@@ -1,0 +1,1633 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>ระบบตรวจสอบถังดับเพลิงอัจฉริยะ - วพบ.ชัยนาท</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <script>
+    window.onerror = function(message, source, lineno) {
+      console.error("Global Error Caught: " + message + " at line " + lineno);
+      var loader = document.getElementById('loader');
+      if(loader) loader.style.display = 'none';
+      return false; 
+    };
+  </script>
+
+  <!-- นำเข้า Bootstrap CSS และไอคอนแบบจัดเต็ม -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <style>
+    :root {
+      --primary-color: #006C45; /* สีเขียวหลักประจำวิทยาลัยพยาบาลบรมราชชนนี ชัยนาท */
+      --secondary-color: #FFFFFF;
+      --accent-color: #EAB308;  /* สีเหลืองทองประจำวิทยาลัยพยาบาลบรมราชชนนี ชัยนาท */
+      --fire-color: #DC2626;    /* สีแดงสัญญาณถังดับเพลิงและป้ายแจ้งเตือนความปลอดภัย */
+      --neutral-dark: #1E293B;  /* Slate 800 */
+      --neutral-light: #F8FAFC; /* Slate 50 */
+      --glass-bg: rgba(255, 255, 255, 0.9);
+      --glass-shadow: 0 10px 30px -10px rgba(0, 108, 69, 0.15);
+      --glass-border: rgba(255, 255, 255, 0.5);
+    }
+
+    body { font-family: 'Sarabun', sans-serif; background-color: #F1F5F9; color: var(--neutral-dark); overflow-x: hidden; margin: 0; padding: 0; }
+    
+    .glass-card { background: var(--glass-bg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 20px; border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); transition: transform 0.3s ease, box-shadow 0.3s ease; }
+    .glass-card:hover { transform: translateY(-3px); box-shadow: 0 15px 35px -5px rgba(0, 108, 69, 0.25); }
+    
+    .login-wrapper { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #022c1b 0%, #006C45 50%, #7e22ce 100%); z-index: 2000; display: flex; justify-content: center; align-items: center; }
+    
+    /* เมนู Sidebar อัตลักษณ์สีเขียวและสีกรอบตัดทอง */
+    .sidebar { height: 100vh; width: 260px; position: fixed; top: 0; left: 0; background: linear-gradient(180deg, #003622 0%, #006C45 100%); color: var(--secondary-color); z-index: 1010; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 4px 0 25px rgba(0, 54, 34, 0.3); }
+    .sidebar-header { padding: 25px 20px; border-bottom: 2px solid rgba(234, 179, 8, 0.15); text-align: center; }
+    
+    .sidebar-menu { padding: 20px 10px; list-style-type: none; margin: 0; }
+    .sidebar-menu li { margin-bottom: 6px; }
+    .sidebar-menu a { display: flex; align-items: center; padding: 12px 18px; color: rgba(255,255,255,0.85); text-decoration: none; border-radius: 12px; font-weight: 500; transition: all 0.2s ease; border-left: 4px solid transparent; }
+    .sidebar-menu a:hover { background-color: rgba(255, 255, 255, 0.08); color: var(--accent-color); transform: translateX(5px); }
+    .sidebar-menu a.active { background-color: rgba(234, 179, 8, 0.12); color: var(--accent-color); border-left: 4px solid var(--accent-color); font-weight: 600; }
+    .sidebar-menu a i { margin-right: 12px; font-size: 1.25rem; }
+    
+    /* ฉากหลังกึ่งโปร่งแสงเมื่อเปิดบนโทรศัพท์มือถือ */
+    .sidebar-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 15, 10, 0.4); z-index: 1005; display: none; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); transition: opacity 0.3s ease; }
+
+    .main-content { margin-left: 260px; padding: 30px; min-height: 100vh; transition: all 0.3s ease; }
+    .top-nav { background: #FFFFFF; padding: 15px 30px; border-radius: 20px; box-shadow: 0 4px 25px rgba(0,54,34,0.06); margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid var(--accent-color); }
+    .user-profile { display: flex; align-items: center; gap: 12px; }
+    
+    /* แผนผังอาคารจำลอง */
+    #map { height: 480px; border-radius: 20px; box-shadow: var(--glass-shadow); border: 2px solid var(--accent-color); background-color: #f1f5f9; }
+    @keyframes pulse-ring { 0% { transform: scale(0.8); opacity: 0.8; } 100% { transform: scale(2.2); opacity: 0; } }
+    .pulse-glow { position: absolute; width: 100%; height: 100%; border-radius: 50%; z-index: 1; animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
+    
+    /* ลายมือชื่อผู้ตรวจเช็ค */
+    .sig-canvas { border: 2px dashed var(--primary-color); border-radius: 12px; cursor: crosshair; background-color: #FAFDFC; width: 100%; height: 200px; }
+    
+    /* พื้นที่แก้ไขข้อความแบบ Interactive */
+    [contenteditable="true"] { padding: 2px 4px; border-radius: 4px; transition: background-color 0.2s ease, outline 0.2s ease; }
+    [contenteditable="true"]:hover { background-color: rgba(0, 108, 69, 0.08); outline: 1.5px dashed var(--accent-color); cursor: pointer; }
+    [contenteditable="true"]:focus { background-color: rgba(0, 108, 69, 0.12); outline: 2px solid var(--primary-color); }
+
+    /* หน้าแบบรายงานทางการราชการกระดาษ A4 แนวนอน */
+    .paper-a4 { background: white; padding: 1.5cm 2cm; margin: 0 auto; box-shadow: 0 0 15px rgba(0,0,0,0.15); border-radius: 8px; color: black; max-width: 297mm; min-height: 210mm; font-family: 'Sarabun', sans-serif; overflow-x: auto; }
+    .official-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13.5px; }
+    .official-table th, .official-table td { border: 1.5px solid #2F3E46; padding: 8px 5px; text-align: center; vertical-align: middle; }
+    .official-table th { background-color: #f1f5f9 !important; font-weight: bold; }
+    .sig-box { margin-top: 40px; display: flex; justify-content: space-around; text-align: center; font-size: 15px; }
+    .sig-line { border-bottom: 1.5px dotted #2F3E46; display: inline-block; margin-bottom: -5px; }
+    .check-pass { color: var(--primary-color); font-weight: bold; }
+    .check-fail { color: var(--fire-color); font-weight: bold; }
+
+    @media (max-width: 991.98px) { 
+      .sidebar { transform: translateX(-100%); } 
+      .sidebar.active { transform: translateX(0); } 
+      .main-content { margin-left: 0; padding: 15px; } 
+      .top-nav { margin-bottom: 20px; padding: 12px 18px; } 
+    }
+    
+    /* ตั้งค่าจัดหน้าสำหรับการสั่งปริ้นท์เป็น PDF และเครื่องพิมพ์ */
+    @media print {
+      @page { size: A4 landscape; margin: 10mm; }
+      body { background: white; margin: 0; padding: 0; }
+      #sidebar, .top-nav, .no-print, #loader, #login-screen { display: none !important; }
+      .main-content { margin: 0 !important; padding: 0 !important; width: 100% !important; min-height: auto; }
+      .paper-a4 { box-shadow: none; border-radius: 0; margin: 0; padding: 0; width: 100%; max-width: none; min-height: auto; overflow: hidden; }
+      .official-table th, .official-table td { border: 1.5px solid black !important; color: black; }
+      .official-table th { background-color: #f1f5f9 !important; -webkit-print-color-adjust: exact; color-adjust: exact; }
+      .glass-card { border: none; box-shadow: none; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; padding: 0 !important; }
+      .tab-content { display: block !important; }
+      #dashboard-tab, #fire-tab, #inspection-tab, #map-tab, #buildings-tab, #users-tab { display: none !important; }
+      #report-tab { display: block !important; }
+      .check-pass, .check-fail { color: black !important; }
+      [contenteditable="true"] { outline: none !important; background-color: transparent !important; }
+    }
+    
+    #loader { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(255, 255, 255, 0.95); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+  </style>
+</head>
+<body>
+
+  <!-- ตัวโหลดระบบสีขาว ป้องกันการกระพริบของสคริปต์หน้าบ้าน -->
+  <div id="loader">
+    <div class="spinner-border text-success" style="width: 3.5rem; height: 3.5rem; color: var(--primary-color) !important;" role="status"></div>
+    <p class="mt-3 text-secondary" style="font-weight: 500;">วิทยาลัยพยาบาลบรมราชชนนี ชัยนาท - กำลังเตรียมระบบ...</p>
+  </div>
+
+  <!-- หน้าจอล็อกอินพรีเมียมสีเขียว-เหลืองทอง -->
+  <div id="login-screen" class="login-wrapper" style="display: none;">
+    <div class="glass-card p-5 text-center" style="max-width: 420px; width: 90%; background: rgba(255, 255, 255, 0.95); border-top: 5px solid var(--accent-color);">
+      <div style="background-color: var(--primary-color); width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; box-shadow: 0 4px 15px rgba(0,108,69,0.3); border: 3px solid var(--accent-color);">
+        <i class="fa-solid fa-shield-halved text-white" style="font-size: 2.5rem;"></i>
+      </div>
+      <h3 class="fw-bold mb-1" style="color: var(--primary-color);">BCNChainat Fire Guard</h3>
+      <p class="text-muted mb-4">ระบบบริหารจัดการถังดับเพลิง<br>วิทยาลัยพยาบาลบรมราชชนนี ชัยนาท</p>
+      <button class="btn btn-success w-100 py-3 fw-bold" onclick="performLogin()" style="border-radius: 12px; font-size: 1.1rem; background-color: var(--primary-color); border: 1px solid var(--accent-color);">
+        <i class="fa-solid fa-right-to-bracket me-2"></i> เข้าสู่ระบบด้วย Google Account
+      </button>
+    </div>
+  </div>
+
+  <!-- พื้นที่หลักของแอปพลิเคชัน -->
+  <div id="app-container" style="display: none;">
+    <div id="sidebar-overlay" class="sidebar-overlay no-print" onclick="toggleSidebar()"></div>
+
+    <!-- เมนูด้านซ้ายสีเขียวอัตลักษณ์ตัดสีทอง -->
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div style="background-color: var(--secondary-color); width: 70px; height: 70px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 3px solid var(--accent-color);">
+          <i class="fa-solid fa-fire-extinguisher" style="font-size: 34px; color: var(--fire-color);"></i>
+        </div>
+        <h6 class="mb-1 text-white fw-bold">BCNChainat Fire Guard</h6>
+        <span class="badge" style="background-color: var(--accent-color); color: var(--primary-color); font-weight: bold; font-size: 0.75rem;">วิทยาลัยพยาบาลบรมราชชนนี ชัยนาท</span>
+      </div>
+      <ul class="sidebar-menu">
+        <li><a href="#" class="active" onclick="switchTab('dashboard-tab', this)"><i class="fa-solid fa-chart-line"></i>หน้าแรก / แดชบอร์ด</a></li>
+        <li><a href="#" onclick="switchTab('fire-tab', this)"><i class="fa-solid fa-fire-extinguisher"></i>ข้อมูลถังดับเพลิง</a></li>
+        <li><a href="#" onclick="switchTab('inspection-tab', this)"><i class="fa-solid fa-clipboard-check"></i>ตรวจเช็คประจำเดือน</a></li>
+        <li><a href="#" onclick="switchTab('report-tab', this)"><i class="fa-solid fa-file-signature"></i>รายงานแบบราชการ</a></li>
+        <li><a href="#" onclick="switchTab('map-tab', this)"><i class="fa-solid fa-map-location-dot"></i>แผนผังอาคารสถานที่</a></li>
+        
+        <li class="admin-menu" style="display:none;"><a href="#" onclick="switchTab('buildings-tab', this)"><i class="fa-solid fa-building"></i>จัดการอาคารสถานที่</a></li>
+        <li class="admin-menu" style="display:none;"><a href="#" onclick="switchTab('users-tab', this)"><i class="fa-solid fa-users-cog"></i>ผู้ใช้งาน & สิทธิ์</a></li>
+        
+        <li class="mt-4 border-top pt-3" style="border-color: rgba(255,255,255,0.1) !important;">
+          <a href="#" onclick="performLogout()" class="text-warning"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
+        </li>
+      </ul>
+    </div>
+
+    <!-- ส่วนเนื้อหาแอปพลิเคชันหลักด้านขวา -->
+    <div class="main-content">
+      <div class="top-nav">
+        <div class="d-flex align-items-center">
+          <button class="btn btn-outline-success d-lg-none me-3" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></button>
+          <h5 class="mb-0 fw-bold d-none d-md-block" style="color: var(--primary-color);"><i class="fa-solid fa-shield-halved me-2"></i>วิทยาลัยพยาบาลบรมราชชนนี ชัยนาท</h5>
+        </div>
+        
+        <div class="dropdown">
+          <div class="user-profile dropdown-toggle" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="cursor: pointer;">
+            <div class="text-end me-2">
+              <span class="d-block fw-bold text-dark" id="user-display-name">Loading...</span>
+              <span class="badge" id="user-display-role" style="font-size: 0.75rem; background-color: var(--accent-color); color: var(--primary-color);">-</span>
+            </div>
+            <div class="avatar-box" style="background-color: var(--primary-color); color: white; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid var(--accent-color);">U</div>
+          </div>
+          <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2" style="border-radius: 12px; min-width: 200px;">
+            <li><h6 class="dropdown-header text-center" id="dropdown-user-email">email@domain.com</h6></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item py-2 fw-bold text-danger" href="#" onclick="performLogout()"><i class="fa-solid fa-right-from-bracket me-2"></i> ออกจากระบบ</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- TAB 1: DASHBOARD -->
+      <div id="dashboard-tab" class="tab-content">
+        <div class="row g-4 mb-4">
+          <div class="col-12 col-md-6 col-lg-3"><div class="glass-card p-4 text-center h-100" style="border-bottom: 4px solid var(--accent-color);"><h6 class="text-muted fw-bold mb-2">ถังทั้งหมดในระบบ</h6><h2 class="display-5 fw-bold" id="dash-total" style="color: var(--primary-color);">0</h2></div></div>
+          <div class="col-12 col-md-6 col-lg-3"><div class="glass-card p-4 text-center h-100" style="border-bottom: 4px solid var(--primary-color);"><h6 class="text-muted fw-bold mb-2">พร้อมใช้งาน 100%</h6><h2 class="display-5 fw-bold text-success" id="dash-ready">0</h2></div></div>
+          <div class="col-12 col-md-6 col-lg-3"><div class="glass-card p-4 text-center h-100" style="border-bottom: 4px solid #f97316;"><h6 class="text-muted fw-bold mb-2">ต้องซ่อมแซม</h6><h2 class="display-5 fw-bold text-warning" id="dash-repair">0</h2></div></div>
+          <div class="col-12 col-md-6 col-lg-3"><div class="glass-card p-4 text-center h-100" style="border-bottom: 4px solid var(--fire-color);"><h6 class="text-muted fw-bold mb-2">หมดอายุ / ชำรุดหนัก</h6><h2 class="display-5 fw-bold text-danger" id="dash-expired">0</h2></div></div>
+        </div>
+        <div class="row g-4">
+          <div class="col-12 col-lg-6"><div class="glass-card p-4"><h5 class="fw-bold mb-4" style="color: var(--primary-color);"><i class="fa-solid fa-chart-pie me-2"></i>สัดส่วนประเภทถังดับเพลิง</h5><div style="position: relative; height:280px;"><canvas id="typeChart"></canvas></div></div></div>
+          <div class="col-12 col-lg-6"><div class="glass-card p-4"><h5 class="fw-bold mb-4" style="color: var(--primary-color);"><i class="fa-solid fa-chart-bar me-2"></i>จำนวนจำแนกตามอาคารเรียน</h5><div style="position: relative; height:280px;"><canvas id="buildingChart"></canvas></div></div></div>
+        </div>
+      </div>
+
+      <!-- TAB 2: FIRE EXTINGUISHER LIST (CRUD) -->
+      <div id="fire-tab" class="tab-content" style="display: none;">
+        <div class="glass-card p-4">
+          <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+            <h5 class="fw-bold mb-0" style="color: var(--primary-color);"><i class="fa-solid fa-fire-extinguisher me-2"></i>ทะเบียนครุภัณฑ์ถังดับเพลิง</h5>
+            <div class="d-flex gap-2">
+              <button class="btn btn-outline-dark d-flex align-items-center gap-2" onclick="printAllQrCodes()" style="border-radius: 12px; border: 1.5px solid var(--primary-color);">
+                <i class="fa-solid fa-print"></i> พิมพ์ QR Code ทั้งหมด
+              </button>
+              <button id="btn-add-fire" class="btn btn-success d-flex align-items-center gap-2 admin-btn" style="background-color: var(--primary-color); border-radius: 12px; display: none; border: 1px solid var(--accent-color);">
+                <i class="fa-solid fa-plus"></i> เพิ่มถังดับเพลิงใหม่
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table id="fire-table" class="table table-hover align-middle w-100">
+              <thead class="table-light"><tr><th>รหัสถัง (ID)</th><th>Serial No.</th><th>ประเภท</th><th>ขนาด</th><th>อาคารสถานที่</th><th>วันหมดอายุ</th><th>สถานะ</th><th>การควบคุม</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: INSPECTION CHECKLIST -->
+      <div id="inspection-tab" class="tab-content" style="display: none;">
+        <div class="row justify-content-center">
+          <div class="col-12 col-xl-8">
+            <div class="glass-card p-4">
+              <h5 class="fw-bold text-center mb-4" style="color: var(--primary-color);"><i class="fa-solid fa-clipboard-check me-2"></i>ฟอร์มตรวจประเมินถังประจำเดือน</h5>
+              <form id="inspection-form" onsubmit="event.preventDefault(); submitInspectionForm();">
+                <div class="row g-3 mb-4">
+                  <div class="col-12 col-md-6">
+                    <label class="form-label fw-bold">เลือกถังดับเพลิงที่จะตรวจ</label>
+                    <select id="inspect-select-tank" class="form-select" required onchange="onSelectInspectTank(this.value)"><option value="">-- กรุณาเลือกถังดับเพลิง --</option></select>
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label fw-bold">ตำแหน่งติดตั้งคร่าวๆ</label>
+                    <input type="text" id="inspect-location-text" class="form-control" readonly placeholder="ข้อมูลดึงอัตโนมัติ">
+                  </div>
+                </div>
+                <h6 class="fw-bold border-bottom pb-2 mb-3" style="color: var(--primary-color);">หัวข้อประเมินมาตรฐานกายภาพ</h6>
+                <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="check-pressure" checked><label class="form-check-label" for="check-pressure">แรงดันเกจวัดปกติ</label></div>
+                <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="check-pin" checked><label class="form-check-label" for="check-pin">สลักนิรภัยซีลล็อกครบถ้วน</label></div>
+                <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="check-hose" checked><label class="form-check-label" for="check-hose">สายและหัวฉีดไม่ชำรุด</label></div>
+                <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="check-rust" checked><label class="form-check-label" for="check-rust">สภาพภายนอกตัวถังไม่มีสนิม</label></div>
+                <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="check-clean" checked><label class="form-check-label" for="check-clean">ไม่มีสิ่งกีดขวาง หยิบจับง่าย</label></div>
+
+                <div class="row g-3 my-4">
+                  <div class="col-12 col-md-6">
+                    <label class="form-label fw-bold">อัพโหลดรูปก่อนตรวจ</label>
+                    <input type="file" class="form-control" id="inspect-photo-file" accept="image/*" onchange="convertImageToBase64('inspect-photo-file', 'photo_before_b64')">
+                    <input type="hidden" id="photo_before_b64">
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label fw-bold">ผลการตรวจโดยสรุป</label>
+                    <select id="inspect-result-status" class="form-select" required>
+                      <option value="ผ่าน" selected>ผ่านการตรวจสอบ (พร้อมใช้งาน)</option>
+                      <option value="ไม่ผ่าน">ชำรุด (ต้องส่งซ่อมแซมเร่งด่วน)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="mb-4">
+                  <label class="form-label fw-bold">ลายมือชื่อผู้ตรวจเช็ค</label>
+                  <canvas id="signature-pad" class="sig-canvas"></canvas>
+                  <div class="text-end mt-2"><button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearSignature()">ล้างลายเซ็น</button></div>
+                </div>
+                <button type="submit" class="btn btn-success w-100 py-3 fw-bold" style="background-color: var(--primary-color); border-radius: 12px; border: 1.5px solid var(--accent-color);"><i class="fa-solid fa-save me-2"></i> บันทึกข้อมูลผลตรวจ</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: OFFICIAL REPORT -->
+      <div id="report-tab" class="tab-content" style="display: none;">
+        <div class="glass-card p-4 mb-4 no-print">
+          <h5 class="fw-bold mb-3" style="color: var(--primary-color);"><i class="fa-solid fa-file-contract me-2"></i>ออกรายงานแบบฟอร์มราชการ (พิมพ์ A4 แนวนอน)</h5>
+          <p class="text-muted mb-3" style="font-size: 0.9rem;"><i class="fa-solid fa-info-circle"></i> ทุกข้อความบนแบบฟอร์มด้านล่างเป็นแบบ **Interactive (คลิกและแก้ไขคำได้ทุกจุด)** เพื่อให้คุณเขียนบันทึกหรือแต่งข้อความตามความต้องการก่อนพิมพ์หรือบันทึกเป็น PDF</p>
+          <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-3">
+              <label class="form-label fw-bold">ประจำเดือน</label>
+              <select id="report-month" class="form-select">
+                <option value="01">มกราคม</option>
+                <option value="02">กุมภาพันธ์</option>
+                <option value="03">มีนาคม</option>
+                <option value="04">เมษายน</option>
+                <option value="05">พฤษภาคม</option>
+                <option value="06">มิถุนายน</option>
+                <option value="07">กรกฎาคม</option>
+                <option value="08">สิงหาคม</option>
+                <option value="09">กันยายน</option>
+                <option value="10">ตุลาคม</option>
+                <option value="11">พฤศจิกายน</option>
+                <option value="12">ธันวาคม</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-3">
+              <label class="form-label fw-bold">ปี พ.ศ.</label>
+              <input type="number" id="report-year" class="form-control" value="2569">
+            </div>
+            <div class="col-12 col-md-3">
+              <label class="form-label fw-bold">อาคารสถานที่</label>
+              <select id="report-building" class="form-select">
+                <option value="ALL">รวมทุกอาคารทั้งหมด</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-3 d-flex gap-2">
+              <button class="btn btn-success w-100 fw-bold" onclick="generateReportData()" style="background-color: var(--primary-color); border: 1.5px solid var(--accent-color);"><i class="fa-solid fa-rotate me-2"></i>ดึงข้อมูล</button>
+              <button class="btn btn-outline-dark fw-bold w-100" onclick="window.print()"><i class="fa-solid fa-print me-2"></i>พิมพ์ / PDF</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- พื้นที่กระดาษ A4 ราชการสำหรับการพิมพ์ -->
+        <div class="paper-a4">
+          <div class="text-center mb-4 text-dark position-relative">
+            <div class="mb-3">
+              <img src="https://i.postimg.cc/C14vg9Rh/logo.png" alt="ตราวิทยาลัยพยาบาลบรมราชชนนี ชัยนาท" style="height: 120px; width: auto; object-fit: contain;">
+            </div>
+            <h5 class="fw-bold mb-1" contenteditable="true">แบบบันทึกการตรวจเช็คและบำรุงรักษาอุปกรณ์ดับเพลิง (แบบฟอร์มราชการ)</h5>
+            <h6 class="fw-bold mb-2" contenteditable="true">ส่วนราชการ วิทยาลัยพยาบาลบรมราชชนนี ชัยนาท</h6>
+            <p class="mb-0">ประจำเดือน <span id="display-report-month" class="fw-bold border-bottom px-2" contenteditable="true">........</span> พ.ศ. <span id="display-report-year" class="fw-bold border-bottom px-2" contenteditable="true">........</span></p>
+            <p class="mb-0 mt-1" id="display-report-building-wrap" style="display:none;">อาคารสถานที่ติดตั้ง: <span id="display-report-building" class="fw-bold border-bottom px-2" contenteditable="true"></span></p>
+          </div>
+
+          <table class="official-table text-dark">
+            <thead>
+              <tr>
+                <th rowspan="2" style="width: 40px;" contenteditable="true">ลำดับ</th>
+                <th rowspan="2" contenteditable="true">สถานที่ติดตั้ง / อาคาร</th>
+                <th rowspan="2" style="width: 50px;" contenteditable="true">ชั้น</th>
+                <th rowspan="2" contenteditable="true">รหัส / Serial No.</th>
+                <th rowspan="2" contenteditable="true">ชนิด / ขนาด</th>
+                <th colspan="5" contenteditable="true">รายการตรวจสภาพ (✓ = ปกติ, ✗ = ชำรุด)</th>
+                <th rowspan="2" style="width: 70px;" contenteditable="true">ผลการตรวจ</th>
+                <th rowspan="2" style="width: 90px;" contenteditable="true">ผู้ตรวจ</th>
+                <th rowspan="2" style="width: 120px;" contenteditable="true">หมายเหตุ</th>
+              </tr>
+              <tr>
+                <th style="width: 55px; font-size: 11px;" contenteditable="true">สาย/เกจ์วัด</th>
+                <th style="width: 55px; font-size: 11px;" contenteditable="true">สลัก/ซีล</th>
+                <th style="width: 55px; font-size: 11px;" contenteditable="true">สายฉีด</th>
+                <th style="width: 55px; font-size: 11px;" contenteditable="true">ตัวถัง</th>
+                <th style="width: 55px; font-size: 11px;" contenteditable="true">เข้าถึงง่าย</th>
+              </tr>
+            </thead>
+            <tbody id="report-tbody">
+              <tr><td colspan="13" class="text-center py-4 text-muted">กรุณากดปุ่ม "ดึงข้อมูล" เพื่อสร้างตารางรายงาน</td></tr>
+            </tbody>
+          </table>
+
+          <div class="sig-box text-dark">
+            <div>
+              <p>ลงชื่อ <span class="sig-line" style="width: 160px;" contenteditable="true"></span> ผู้ตรวจประเมิน</p>
+              <p>( <span class="sig-line" style="width: 160px;" contenteditable="true">พิมพ์ชื่อ-สกุลตรงนี้</span> )</p>
+              <p>ตำแหน่ง <span class="sig-line" style="width: 160px;" contenteditable="true">ตำแหน่งผู้รายงาน</span></p>
+              <p>วันที่ <span class="sig-line" style="width: 30px;" contenteditable="true"></span> / <span class="sig-line" style="width: 80px;" contenteditable="true"></span> / <span class="sig-line" style="width: 50px;" contenteditable="true"></span></p>
+            </div>
+            <div>
+              <p>ลงชื่อ <span class="sig-line" style="width: 160px;" contenteditable="true"></span> ผู้รับรองข้อมูล</p>
+              <p>( <span class="sig-line" style="width: 160px;" contenteditable="true">พิมพ์ชื่อ-สกุลตรงนี้</span> )</p>
+              <p>ตำแหน่ง <span class="sig-line" style="width: 160px;" contenteditable="true">ตำแหน่งผู้อนุมัติ</span></p>
+              <p>วันที่ <span class="sig-line" style="width: 30px;" contenteditable="true"></span> / <span class="sig-line" style="width: 80px;" contenteditable="true"></span> / <span class="sig-line" style="width: 50px;" contenteditable="true"></span></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 5: MAP -->
+      <div id="map-tab" class="tab-content" style="display: none;">
+        <div class="glass-card p-4">
+          <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+            <h5 class="fw-bold mb-0" style="color: var(--primary-color);"><i class="fa-solid fa-map-location-dot me-2"></i>แผนผังอาคารสถานที่ และจุดติดตั้ง</h5>
+            <div class="d-flex gap-2">
+               <span class="badge px-3 py-2" style="background-color: rgba(74, 222, 128, 0.15); border: 1px solid #4ade80; color: #16a34a;"><i class="fa-solid fa-fire-extinguisher me-1"></i> พร้อมใช้</span>
+               <span class="badge px-3 py-2" style="background-color: rgba(251, 146, 60, 0.15); border: 1px solid #fb923c; color: #ea580c;"><i class="fa-solid fa-fire-extinguisher me-1"></i> ต้องซ่อม</span>
+               <span class="badge px-3 py-2" style="background-color: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #dc2626;"><i class="fa-solid fa-fire-extinguisher me-1"></i> หมดอายุ</span>
+            </div>
+          </div>
+          <div id="map"></div>
+          <p class="text-muted mt-3 mb-0" style="font-size: 0.85rem;"><i class="fa-solid fa-circle-info me-1"></i> แผนผังจำลองถูกสร้างอัตโนมัติตามจำนวนอาคารในเมนู "จัดการอาคารสถานที่"</p>
+        </div>
+      </div>
+
+      <!-- TAB 6: BUILDINGS MANAGEMENT -->
+      <div id="buildings-tab" class="tab-content" style="display: none;">
+        <div class="glass-card p-4">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h5 class="fw-bold mb-0" style="color: var(--primary-color);"><i class="fa-solid fa-building me-2"></i>จัดการอาคารสถานที่</h5>
+            <button class="btn btn-outline-success admin-btn" onclick="openAddBuildingModal()"><i class="fa-solid fa-plus me-1"></i> เพิ่มอาคารใหม่</button>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle w-100" id="buildings-table">
+              <thead><tr><th>รหัสอาคาร</th><th>ชื่ออาคารสถานที่</th><th>สถานะ</th><th>การจัดการ</th></tr></thead>
+              <tbody id="buildings-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 7: USERS MANAGEMENT -->
+      <div id="users-tab" class="tab-content" style="display: none;">
+        <div class="glass-card p-4">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h5 class="fw-bold mb-0" style="color: var(--primary-color);"><i class="fa-solid fa-users-cog me-2"></i>ตั้งค่าผู้ใช้ระบบ</h5>
+            <button class="btn btn-outline-success admin-btn" onclick="openAddUserModal()"><i class="fa-solid fa-user-plus me-1"></i> เพิ่มผู้ใช้งาน</button>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle w-100" id="users-table">
+              <thead><tr><th>อีเมล (Google Account)</th><th>ชื่อ-นามสกุล</th><th>สิทธิ์ (Role)</th><th>สถานะ</th><th>การจัดการ</th></tr></thead>
+              <tbody id="users-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- END CREDITS - อัตลักษณ์สุภาพเรียบร้อยตัดสีทอง (ซ่อนไม่ให้ปรากฏตอนสั่งพิมพ์ใบรายงาน) -->
+      <footer class="mt-5 py-4 text-center text-muted no-print" style="border-top: 1px dashed rgba(0, 108, 69, 0.15); font-size: 0.85rem;">
+        <div class="container-fluid">
+          <p class="mb-1">
+            <span class="badge px-3 py-2 bg-success-subtle text-success rounded-pill fw-normal" style="font-family: 'Sarabun';">
+              <i class="fa-solid fa-shield-halved me-1"></i> BCNChainat Fire Guard v3.3.0
+            </span>
+          </p>
+          <p class="mb-1 mt-2">
+            พัฒนาโดย <span class="fw-bold" style="color: var(--primary-color);">ผศ.ยุทธนา นุ่นละออง</span>
+          </p>
+          <p class="mb-0 text-secondary">
+            งานวิทยบริการและสื่อสารองค์กร วิทยาลัยพยาบาลบรมราชชนนี ชัยนาท &copy; 2026
+          </p>
+        </div>
+      </footer>
+
+    </div>
+  </div>
+
+  <!-- MODALS -->
+  <!-- QR Code Modal -->
+  <div class="modal fade" id="qrModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="border-radius: 20px; border-top: 5px solid var(--accent-color);">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold" style="color: var(--primary-color);"><i class="fa-solid fa-qrcode me-2"></i>ป้าย QR Code ประจำถัง</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body text-center">
+          <div id="qr-label-card" class="p-4 mx-auto my-2 text-dark" style="border: 3px double var(--primary-color); border-radius: 15px; max-width: 320px; background-color: #fff;">
+            <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
+              <i class="fa-solid fa-fire-extinguisher text-danger" style="font-size: 24px;"></i>
+              <span class="fw-bold text-success" style="font-size: 1.15rem; font-family: 'Sarabun'; color: var(--primary-color) !important;">BCNCHAINAT FIRE GUARD</span>
+            </div>
+            <p class="text-muted small mb-1" style="font-size: 0.75rem;">วิทยาลัยพยาบาลบรมราชชนนี ชัยนาท</p>
+            <hr class="my-2" style="border-top: 2px dashed var(--accent-color); opacity: 0.5;">
+            <h4 class="fw-bold mb-0" id="qr-modal-tank-id" style="color: var(--primary-color); letter-spacing: 0.5px;">FE-XXXXX</h4>
+            <p class="text-muted small mb-3" id="qr-modal-serial" style="font-size: 0.8rem;">Serial: XXXXXX</p>
+            
+            <div class="my-3 d-flex justify-content-center">
+              <img id="qr-modal-img" src="" alt="QR Code" style="width: 170px; height: 170px; border: 1px solid #ddd; padding: 6px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+            </div>
+            
+            <div class="mt-3">
+              <p class="mb-1 small fw-bold text-dark">ชนิด: <span id="qr-modal-type" class="text-secondary">-</span> | ขนาด: <span id="qr-modal-size" class="text-secondary">-</span> ปอนด์</p>
+              <p class="mb-0 small text-truncate fw-bold" style="color: var(--primary-color);"><i class="fa-solid fa-location-dot me-1"></i> <span id="qr-modal-location">-</span></p>
+            </div>
+          </div>
+          <div class="mt-3 text-muted" style="font-size: 0.85rem;"><i class="fa-solid fa-circle-info me-1"></i> สแกนด้วยกล้องมือถือเพื่อบันทึกผลตรวจประจำเดือนได้ทันที</div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-outline-secondary w-50" data-bs-dismiss="modal">ปิด</button>
+          <button type="button" class="btn btn-success w-50" onclick="printSingleQrLabel()" style="background-color: var(--primary-color); border: 1px solid var(--accent-color);"><i class="fa-solid fa-print me-2"></i>พิมพ์ป้ายนี้</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Building Modal -->
+  <div class="modal fade" id="buildingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="border-radius: 20px; border-top: 5px solid var(--accent-color);">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold" style="color: var(--primary-color);" id="buildingModalTitle">เพิ่มอาคาร</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="building-form" onsubmit="event.preventDefault(); submitBuildingForm();">
+          <input type="hidden" id="form-building-id">
+          <div class="modal-body">
+            <div class="mb-3"><label class="form-label fw-bold">ชื่ออาคารสถานที่</label><input type="text" id="form-building-name" class="form-control" required></div>
+            <div class="mb-3"><label class="form-label fw-bold">สถานะ</label><select id="form-building-status" class="form-select"><option value="Active">เปิดใช้งาน</option><option value="Inactive">ปิดใช้งาน</option></select></div>
+          </div>
+          <div class="modal-footer border-0"><button type="submit" class="btn btn-success w-100" style="background-color: var(--primary-color); border: 1px solid var(--accent-color);">บันทึกข้อมูล</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fire Extinguisher Modal -->
+  <div class="modal fade" id="fireModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="border-radius: 20px; border-top: 5px solid var(--accent-color);">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold" style="color: var(--primary-color);" id="fireModalTitle">เพิ่มถังดับเพลิง</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="fire-form" onsubmit="event.preventDefault(); submitFireForm();">
+          <input type="hidden" id="form-fire-id">
+          <div class="modal-body">
+            <div class="mb-3"><label class="form-label fw-bold">รหัส Serial Number</label><input type="text" id="form-serial" class="form-control" required></div>
+            <div class="row g-2 mb-3">
+              <div class="col-6"><label class="form-label fw-bold">ประเภท</label><select id="form-type" class="form-select" required><option value="ABC">ABC</option><option value="CO2">CO2</option><option value="Foam">Foam</option></select></div>
+              <div class="col-6"><label class="form-label fw-bold">ขนาด (ปอนด์)</label><input type="text" id="form-size" class="form-control" required></div>
+            </div>
+            <div class="row g-2 mb-3">
+              <div class="col-6"><label class="form-label fw-bold">อาคารสถานที่ติดตั้ง</label><select id="form-building-select" class="form-select" required><option value="">-- โหลดอาคาร --</option></select></div>
+              <div class="col-6"><label class="form-label fw-bold">ชั้น</label><input type="text" id="form-floor" class="form-control"></div>
+            </div>
+            <div class="row g-2 mb-3">
+              <div class="col-6"><label class="form-label fw-bold">พิกัดแกน Y ภายในอาคาร (0-150)</label><input type="number" step="any" id="form-lat" class="form-control" value="0"></div>
+              <div class="col-6"><label class="form-label fw-bold">พิกัดแกน X ภายในอาคาร (0-280)</label><input type="number" step="any" id="form-lng" class="form-control" value="0"></div>
+            </div>
+            <div class="mb-3"><label class="form-label fw-bold">วันหมดอายุของน้ำยา</label><input type="date" id="form-expire" class="form-control" required></div>
+          </div>
+          <div class="modal-footer border-0"><button type="submit" class="btn btn-success w-100" style="background-color: var(--primary-color); border: 1px solid var(--accent-color);">บันทึกข้อมูล</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Modal (Admin) -->
+  <div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="border-radius: 20px; border-top: 5px solid var(--accent-color);">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold" style="color: var(--primary-color);">จัดการสิทธิ์ผู้ใช้</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="user-form" onsubmit="event.preventDefault(); submitUserForm();">
+          <div class="modal-body">
+            <div class="mb-3"><label class="form-label fw-bold">อีเมลผู้ใช้งาน</label><input type="email" id="user-email" class="form-control" required></div>
+            <div class="mb-3"><label class="form-label fw-bold">ชื่อ-นามสกุล</label><input type="text" id="user-name" class="form-control" required></div>
+            <div class="mb-3"><label class="form-label fw-bold">ระดับสิทธิ์ (Role)</label><select id="user-role" class="form-select"><option value="Admin">Admin</option><option value="Inspector">Inspector</option><option value="Viewer">Viewer</option></select></div>
+          </div>
+          <div class="modal-footer border-0"><button type="submit" class="btn btn-success w-100" style="background-color: var(--primary-color); border: 1px solid var(--accent-color);">บันทึกข้อมูล</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Libraries -->
+  <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    let activeUser = null;
+    let allExtinguishers = [];
+    let allBuildings = [];
+    let mapInstance = null;
+    let markerGroup = null;
+    let currentBlueprintOverlay = null;
+    let currentBlueprint = null;
+    let webAppUrl = ""; 
+
+    let typeChartInstance = null;
+    let buildingChartInstance = null;
+
+    let canvas = null;
+    let ctx = null;
+    let isDrawing = false;
+
+    // คำแปลภาษาไทยของตาราง DataTables ฝังในตัวแบบ Local ป้องกันบั๊ก Iframe Sandbox บล็อกลิงก์ AJAX ภายนอก
+    const thaiLanguageTranslation = {
+      "emptyTable": "ไม่มีข้อมูลในตาราง",
+      "info": "แสดง _START_ ถึง _END_ จาก _TOTAL_ รายการ",
+      "infoEmpty": "แสดง 0 ถึง 0 จาก 0 รายการ",
+      "infoFiltered": "(กรองข้อมูลจากทั้งหมด _MAX_ รายการ)",
+      "lengthMenu": "แสดง _MENU_ รายการ",
+      "loadingRecords": "กำลังโหลด...",
+      "processing": "กำลังดำเนินการ...",
+      "search": "ค้นหา:",
+      "zeroRecords": "ไม่พบข้อมูลที่ค้นหา",
+      "paginate": {
+        "first": "หน้าแรก",
+        "last": "หน้าสุดท้าย",
+        "next": "ถัดไป",
+        "previous": "ก่อนหน้า"
+      }
+    };
+
+    // ความปลอดภัยขั้นสูงสำหรับการเก็บเซสชันในเบราว์เซอร์
+    const safeStorage = {
+      getItem: function(k) { try { return sessionStorage.getItem(k); } catch (e) { return window['mock_' + k]; } },
+      setItem: function(k, v) { try { sessionStorage.setItem(k, v); } catch (e) { window['mock_' + k] = v; } },
+      removeItem: function(k) { try { sessionStorage.removeItem(k); } catch (e) { delete window['mock_' + k]; } }
+    };
+
+    $(document).ready(function() {
+      try {
+        setupSignaturePad();
+        setupReportDefaults();
+        
+        // ตรวจจับ Parameter แบบเรียลไทม์เพื่อข้ามเข้า Guest Mode หรือหน้าหลัก
+        const params = new URLSearchParams(window.location.search);
+        const tankId = params.get('id');
+        
+        if (tankId) {
+          initGuestInspectionMode(tankId);
+        } else {
+          // หากเบราว์เซอร์ฝัง Iframe ให้เรียกใช้ Google Apps Script Native URL Resolver
+          if (window.google && window.google.script && window.google.script.url) {
+            window.google.script.url.getLocation(function(location) {
+              const gasTankId = location.parameter.id;
+              if (gasTankId) {
+                initGuestInspectionMode(gasTankId);
+              } else {
+                handleNormalSystemNavigation();
+              }
+            });
+          } else {
+            handleNormalSystemNavigation();
+          }
+        }
+        
+        // ออโต้พิกัดเมื่อเปลี่ยนประเภทอาคารตอนจัดเก็บข้อมูลถังดับเพลิง
+        $('#form-building-select').on('change', function() {
+           const bldName = $(this).val();
+           const bld = allBuildings.find(function(b) { return b.name === bldName; });
+           if (bld) {
+               $('#form-lat').val(75 + Math.round(Math.random() * 40 - 20));
+               $('#form-lng').val(140 + Math.round(Math.random() * 60 - 30));
+           }
+        });
+      } catch (e) {
+        console.error("Startup error: ", e);
+        $('#loader').fadeOut(400); $('#login-screen').fadeIn(400);
+      }
+
+      // 🛡️ [ความปลอดภัยขั้นสูง] บังคับปิดหน้าจอขาวภายใน 4 วินาที ป้องกันปัญหาเน็ตช้าหรือโหลด CDN พลาด
+      setTimeout(function() {
+        const loader = $('#loader');
+        if (loader.is(':visible')) {
+          console.warn("Safety trigger active: Force closing loader screen.");
+          loader.fadeOut(400);
+        }
+      }, 4000);
+    });
+
+    // นำเข้าสู่ขั้นตอนการล็อกอินทั่วไป
+    function handleNormalSystemNavigation() {
+      const isLoggedIn = safeStorage.getItem('bcnchainat_logged_in') === 'true';
+      if (!isLoggedIn) {
+        $('#loader').fadeOut(400, function(){ $('#login-screen').fadeIn(400); });
+      } else {
+        checkAndInitSystem();
+      }
+    }
+
+    // ฟังก์ชันเริ่มต้นการใช้งานสำหรับผู้ใช้ที่สแกนคิวอาร์โค้ดเข้ามาตรวจโดยตรง (ไม่ต้องล็อกอิน)
+    function initGuestInspectionMode(tankId) {
+      $('#sidebar').hide();
+      $('.main-content').css('margin-left', '0');
+      $('.top-nav').hide();
+      
+      if (window.google && window.google.script && window.google.script.run) {
+        window.google.script.run
+          .withSuccessHandler(function(list) {
+            allExtinguishers = list || [];
+            setupGuestFormLayout(tankId);
+          })
+          .withFailureHandler(function(err) {
+            $('#loader').fadeOut(400);
+            Swal.fire('เชื่อมต่อข้อมูลล้มเหลว', 'ไม่สามารถเข้าถึงฐานข้อมูลถังดับเพลิงของวิทยาลัยได้: ' + err.toString(), 'error');
+          })
+          .getAllFireExtinguishers();
+      } else {
+        $('#loader').fadeOut(400);
+        Swal.fire('ข้อผิดพลาดระบบ', 'โหมดการสแกน QR Code ตรวจประเมินด่วนต้องใช้งานผ่านทางแอปพลิเคชัน Google Apps Script Web App ของวิทยาลัยเท่านั้น', 'error');
+      }
+    }
+
+    function setupGuestFormLayout(tankId) {
+      $('#loader').fadeOut(400);
+      $('#app-container').fadeIn(400);
+      
+      $('.tab-content').hide();
+      $('#inspection-tab').show();
+      setTimeout(resizeCanvas, 150);
+      
+      const selectTank = $('#inspect-select-tank');
+      selectTank.empty();
+      selectTank.append('<option value="">-- กรุณาเลือกถังดับเพลิง --</option>');
+      
+      let targetTankExists = false;
+      let selectedTankItem = null;
+      allExtinguishers.forEach(function(item) {
+        selectTank.append('<option value="' + item.id + '">' + item.id + ' - ' + (item.serial_number || '') + ' (' + (item.building || '') + ')</option>');
+        if (item.id === tankId) {
+          targetTankExists = true;
+          selectedTankItem = item;
+        }
+      });
+      
+      if (targetTankExists && selectedTankItem) {
+        selectTank.val(tankId).trigger('change');
+        selectTank.prop('disabled', true);
+        
+        // ทำความสะอาดการ์ดข้อมูลเดิมและแทรกการ์ดข้อมูลโปรไฟล์จริงของถังดับเพลิง
+        $('#guest-tank-info-card').remove();
+        const infoCardHtml = `
+          <div id="guest-tank-info-card" class="card mb-4 border-0 shadow-sm" style="border-radius: 15px; overflow: hidden; border-left: 5px solid var(--accent-color); background-color: #ffffff;">
+            <div class="card-body p-3">
+              <div class="row align-items-center">
+                <div class="col-auto">
+                  <div class="p-3 rounded-circle d-flex align-items-center justify-content-center" style="width: 54px; height: 54px; background-color: rgba(0, 108, 69, 0.1);">
+                    <i class="fa-solid fa-fire-extinguisher" style="font-size: 26px; color: var(--primary-color);"></i>
+                  </div>
+                </div>
+                <div class="col">
+                  <h6 class="fw-bold mb-1" style="color: var(--primary-color);">ข้อมูลถังดับเพลิงที่สแกน: ${selectedTankItem.id}</h6>
+                  <p class="mb-1 small text-dark">
+                    <strong>อาคารติดตั้ง:</strong> ${selectedTankItem.building || '-'} | 
+                    <strong>ชั้น:</strong> ${selectedTankItem.floor || '1'} | 
+                    <strong>ประเภท:</strong> ${selectedTankItem.type || '-'} (${selectedTankItem.size || '-'} ปอนด์)
+                  </p>
+                  <p class="mb-0 small text-secondary">
+                    <i class="fa-solid fa-circle-exclamation text-warning me-1"></i> <strong>วันหมดอายุของน้ำยา:</strong> <span class="text-danger fw-bold">${selectedTankItem.expire_date || '-'}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        $('#inspection-form').prepend(infoCardHtml);
+      } else {
+        Swal.fire('แจ้งเตือนรหัสถัง', 'ไม่พบรหัสถังดับเพลิงนี้ในระบบอย่างเป็นทางการ ท่านสามารถระบุและเลือกรายการถังดับเพลิงในระบบด้วยตนเอง', 'info');
+      }
+      
+      if ($('#guest-mode-banner').length === 0) {
+        const guestBanner = `
+          <div id="guest-mode-banner" class="alert d-flex align-items-center mb-4 text-success" role="alert" style="border-radius: 15px; background-color: rgba(0, 108, 69, 0.08); border: 1.5px dashed var(--primary-color);">
+            <i class="fa-solid fa-qrcode me-3" style="font-size: 1.8rem; color: var(--primary-color);"></i>
+            <div>
+              <h6 class="alert-heading fw-bold mb-1" style="color: var(--primary-color);">โหมดสแกนตรวจสอบด่วน (BCNChainat Quick QR Scan)</h6>
+              <p class="mb-0 small text-secondary">บันทึกผลตรวจสอบทางกายภาพภายนอกประจำเดือนของถังดับเพลิงสำเร็จโดยไม่ต้องใช้สิทธิ์เข้าสู่ระบบหลัก</p>
+            </div>
+          </div>
+        `;
+        $('#inspection-form').prepend(guestBanner);
+      }
+    }
+
+    function setupReportDefaults() {
+      const now = new Date();
+      let m = (now.getMonth() + 1).toString().padStart(2, '0');
+      $('#report-month').val(m);
+      $('#report-year').val(now.getFullYear() + 543);
+    }
+
+    // ยืนยันสิทธิ์กับหลังบ้านและดึงข้อมูลเมื่อเปิดแอปปกติ
+    function checkAndInitSystem() {
+      try {
+        if (window.google && window.google.script && window.google.script.run) {
+          window.google.script.run
+            .withSuccessHandler(function(authResult) {
+              if (!authResult || !authResult.authorized) {
+                safeStorage.removeItem('bcnchainat_logged_in');
+                $('#loader').fadeOut(400); $('#app-container').hide(); $('#login-screen').fadeIn(400);
+                Swal.fire('การเข้าถึงถูกปฏิเสธ', 'บัญชีผู้ใช้หรือสิทธิ์นี้ไม่มีสิทธิ์เข้าถึงระบบ', 'error'); return;
+              }
+              activeUser = authResult;
+              setupUIForRole(authResult);
+              loadDashboardData();
+              loadAllBuildings();
+              loadFireExtinguishers();
+              $('#loader').fadeOut(400); $('#login-screen').hide(); $('#app-container').fadeIn(400);
+              handleUrlParameters();
+            })
+            .withFailureHandler(function(err) {
+              $('#loader').fadeOut(400);
+              Swal.fire('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'ไม่สามารถดึงสิทธิ์การเข้าใช้งานจากเซิร์ฟเวอร์หลักได้: ' + err.toString(), 'error');
+            })
+            .checkUserAuthorization();
+        } else {
+          $('#loader').fadeOut(400);
+          $('#login-screen').fadeIn(400);
+          Swal.fire('ข้อผิดพลาดระบบคลาวด์', 'กรุณารันแอปพลิเคชันผ่าน Web App ของ Google Apps Script เท่านั้นเพื่อความปลอดภัยของฐานข้อมูลสถาบัน', 'warning');
+        }
+      } catch (e) {
+        $('#loader').fadeOut(400);
+        Swal.fire('เกิดข้อผิดพลาด', e.toString(), 'error');
+      }
+    }
+
+    function setupUIForRole(auth) {
+      $('#user-display-name').text(auth.name || auth.email.split('@')[0]);
+      $('#user-display-role').text(auth.role || 'Viewer');
+      $('#dropdown-user-email').text(auth.email);
+      $('.avatar-box').text((auth.email).substring(0, 1).toUpperCase());
+      if (auth.role === 'Admin') { $('.admin-menu').show(); $('.admin-btn').show(); }
+      webAppUrl = auth.webAppUrl || window.location.href.split('?')[0];
+    }
+
+    function performLogin() {
+      Swal.fire({ title: 'กำลังตรวจสอบสิทธิ์...', allowOutsideClick: false, didOpen: function() { Swal.showLoading(); } });
+      try {
+        if (window.google && window.google.script && window.google.script.run) {
+          window.google.script.run
+            .withSuccessHandler(function(authResult) {
+              if (authResult && authResult.authorized) {
+                safeStorage.setItem('bcnchainat_logged_in', 'true');
+                activeUser = authResult;
+                setupUIForRole(authResult);
+                Swal.close();
+                $('#login-screen').fadeOut(300, function() {
+                  $('#app-container').fadeIn(300);
+                  loadDashboardData(); loadAllBuildings(); loadFireExtinguishers();
+                  Swal.fire('เข้าสู่ระบบสำเร็จ', 'ยินดีต้อนรับ ' + authResult.name, 'success');
+                });
+              } else { Swal.fire('เข้าใช้งานไม่ได้', 'ไม่มีสิทธิ์เข้าถึงระบบ', 'error'); }
+            })
+            .withFailureHandler(function(err) {
+              Swal.fire('เกิดข้อผิดพลาดในการเชื่อมต่อ', err.toString(), 'error');
+            })
+            .loginUser(); 
+        } else {
+          Swal.fire('ไม่พบส่วนเชื่อมต่อ Google', 'แอปพลิเคชันนี้ใช้การตรวจสิทธิ์และจัดเก็บข้อมูลแบบ Real-time บนระบบ Google Sheets ของวิทยาลัยฯ จึงต้องใช้งานผ่านลิงก์ Google Apps Script จริงเท่านั้น', 'error');
+        }
+      } catch (e) {
+        Swal.fire('เกิดข้อผิดพลาด', e.toString(), 'error');
+      }
+    }
+
+    function performLogout() {
+      Swal.fire({ title: 'ยืนยันออกระบบ?', icon: 'warning', showCancelButton: true, confirmButtonText: 'ออกจากระบบ' }).then(function(r) {
+        if (r.isConfirmed) {
+          safeStorage.removeItem('bcnchainat_logged_in');
+          try {
+            if (window.google && window.google.script && window.google.script.run) {
+              window.google.script.run.withSuccessHandler(function() {
+                  $('#app-container').fadeOut(300, function() { $('#login-screen').fadeIn(300); });
+              }).logoutUser(); 
+            } else { $('#app-container').fadeOut(300, function() { $('#login-screen').fadeIn(300); }); }
+          } catch (e) { $('#app-container').fadeOut(300, function() { $('#login-screen').fadeIn(300); }); }
+        }
+      });
+    }
+
+    function switchTab(tabId, el) {
+      $('.tab-content').hide(); $('#' + tabId).show(); $('.sidebar-menu a').removeClass('active'); $(el).addClass('active');
+      if (tabId === 'map-tab') setTimeout(initLeafletMap, 300);
+      if (tabId === 'inspection-tab') setTimeout(resizeCanvas, 150);
+      if (tabId === 'users-tab' && activeUser && activeUser.role === 'Admin') loadUsersTable();
+      if (tabId === 'buildings-tab' && activeUser && activeUser.role === 'Admin') loadAllBuildings();
+      if (tabId === 'report-tab') generateReportData(); 
+      
+      if ($(window).width() < 992) {
+        $('#sidebar').removeClass('active');
+        $('#sidebar-overlay').fadeOut(200);
+      }
+    }
+    
+    function toggleSidebar() { 
+      $('#sidebar').toggleClass('active'); 
+      if ($('#sidebar').hasClass('active') && $(window).width() < 992) {
+        $('#sidebar-overlay').fadeIn(200);
+      } else {
+        $('#sidebar-overlay').fadeOut(200);
+      }
+    }
+
+    function loadDashboardData() {
+      if (!window.google || !window.google.script || !window.google.script.run) return;
+      window.google.script.run.withSuccessHandler(updateDashboardUI).getDashboardData();
+    }
+    
+    // สร้างและประมวลผลกราฟ Chart.js
+    function updateDashboardUI(data) {
+      if (!data || !data.summary) return;
+      
+      $('#dash-total').text(data.summary.total || 0); 
+      $('#dash-ready').text(data.summary.ready || 0); 
+      $('#dash-repair').text(data.summary.repair || 0); 
+      $('#dash-expired').text(data.summary.expired || 0);
+
+      try {
+        const typeCtx = document.getElementById('typeChart').getContext('2d');
+        if (typeChartInstance) {
+          typeChartInstance.destroy();
+        }
+
+        const typesData = data.types || {};
+        const typeLabels = Object.keys(typesData).filter(key => typesData[key] > 0);
+        const typeValues = typeLabels.map(key => typesData[key]);
+
+        typeChartInstance = new Chart(typeCtx, {
+          type: 'doughnut',
+          data: {
+            labels: typeLabels,
+            datasets: [{
+              data: typeValues,
+              backgroundColor: [
+                '#006C45', // สีกรม-เขียว วพบ.ชัยนาท
+                '#EAB308', // สีเหลืองทอง วพบ.ชัยนาท
+                '#DC2626', // แดงถังดับเพลิง
+                '#3b82f6', // ฟ้า
+                '#10b981', // เขียวสะท้อนแสง
+                '#f97316'  // ส้มแจ้งเตือน
+              ],
+              borderWidth: 2,
+              borderColor: '#ffffff'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { font: { family: 'Sarabun', size: 12 } }
+              }
+            }
+          }
+        });
+      } catch (err) {
+        console.warn("Failed to render doughnut chart:", err);
+      }
+
+      try {
+        const bldCtx = document.getElementById('buildingChart').getContext('2d');
+        if (buildingChartInstance) {
+          buildingChartInstance.destroy();
+        }
+
+        const buildingsData = data.buildings || {};
+        const bldLabels = Object.keys(buildingsData);
+        const bldValues = Object.values(buildingsData);
+
+        buildingChartInstance = new Chart(bldCtx, {
+          type: 'bar',
+          data: {
+            labels: bldLabels,
+            datasets: [{
+              label: 'จำนวนถัง (ถัง)',
+              data: bldValues,
+              backgroundColor: '#006C45',
+              borderColor: '#EAB308',
+              borderWidth: 1,
+              borderRadius: 8
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: { stepSize: 1, font: { family: 'Sarabun' } }
+              },
+              x: {
+                ticks: { font: { family: 'Sarabun', size: 11 } }
+              }
+            }
+          }
+        });
+      } catch (err) {
+        console.warn("Failed to render bar chart:", err);
+      }
+    }
+
+    function loadAllBuildings() {
+      if (!window.google || !window.google.script || !window.google.script.run) return;
+      window.google.script.run.withSuccessHandler(function(list) {
+          allBuildings = list || []; 
+          renderBuildingsTable(allBuildings); 
+          updateBuildingDropdowns();
+          if ($('#map-tab').is(':visible') && mapInstance) initLeafletMap();
+      }).getAllBuildings();
+    }
+
+    function renderBuildingsTable(list) {
+      const tbody = $('#buildings-tbody'); tbody.empty();
+      list.forEach(function(b) {
+        var sb = b.status === 'Active' ? '<span class="badge bg-success">เปิดใช้งาน</span>' : '<span class="badge bg-secondary">ปิดใช้งาน</span>';
+        var act = '<button class="btn btn-sm btn-outline-warning me-1" onclick="openEditBuildingModal(\''+b.id+'\', \''+b.name+'\', \''+b.status+'\')"><i class="fa-solid fa-edit"></i></button>' + '<button class="btn btn-sm btn-outline-danger" onclick="deleteBuildingReq(\''+b.id+'\')"><i class="fa-solid fa-trash"></i></button>';
+        tbody.append('<tr><td><strong>'+b.id+'</strong></td><td>'+b.name+'</td><td>'+sb+'</td><td>'+act+'</td></tr>');
+      });
+      
+      try {
+        if ($.fn.DataTable.isDataTable('#buildings-table')) $('#buildings-table').DataTable().destroy();
+        $('#buildings-table').DataTable({ 
+          language: thaiLanguageTranslation, 
+          responsive: true 
+        });
+      } catch (err) {
+        console.warn("DataTables initialization bypassed due to sandbox:", err);
+      }
+    }
+
+    function updateBuildingDropdowns() {
+      const selectForm = $('#form-building-select'); 
+      const selectReport = $('#report-building');
+      selectForm.empty(); selectForm.append('<option value="">-- เลือกอาคารสถานที่ --</option>');
+      selectReport.empty(); selectReport.append('<option value="ALL">รวมทุกอาคารทั้งหมด</option>');
+      
+      allBuildings.forEach(function(b) { 
+        if (b.status === 'Active') {
+          selectForm.append('<option value="'+b.name+'">'+b.name+'</option>'); 
+          selectReport.append('<option value="'+b.name+'">'+b.name+'</option>'); 
+        }
+      });
+    }
+
+    function openAddBuildingModal() { $('#building-form')[0].reset(); $('#form-building-id').val(''); $('#buildingModalTitle').text('เพิ่มอาคารใหม่'); $('#buildingModal').modal('show'); }
+    function openEditBuildingModal(id, name, status) { $('#form-building-id').val(id); $('#form-building-name').val(name); $('#form-building-status').val(status); $('#buildingModalTitle').text('แก้ไขข้อมูลอาคาร'); $('#buildingModal').modal('show'); }
+    
+    function submitBuildingForm() {
+      const data = { id: $('#form-building-id').val(), name: $('#form-building-name').val(), status: $('#form-building-status').val() };
+      Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: function() { Swal.showLoading(); } });
+      if (window.google && window.google.script && window.google.script.run) {
+        window.google.script.run.withSuccessHandler(function() { Swal.fire('สำเร็จ', 'บันทึกอาคารแล้ว', 'success'); $('#buildingModal').modal('hide'); loadAllBuildings(); }).saveBuilding(data);
+      } else { 
+        Swal.fire('ข้อผิดพลาด', 'ไม่พบการทำงานของ Google Apps Script เซิร์ฟเวอร์หลัก', 'error'); 
+      }
+    }
+
+    function deleteBuildingReq(id) {
+      Swal.fire({ title: 'ยืนยันลบอาคาร?', text: id, icon: 'warning', showCancelButton: true, confirmButtonText: 'ลบ' }).then(function(result) {
+        if (result.isConfirmed && window.google && window.google.script && window.google.script.run) {
+          window.google.script.run.withSuccessHandler(function() { loadAllBuildings(); }).deleteBuilding(id);
+        }
+      });
+    }
+
+    function generateReportData() {
+      const monthText = $('#report-month option:selected').text();
+      const yearVal = $('#report-year').val();
+      const bldVal = $('#report-building').val();
+
+      $('#display-report-month').text(monthText);
+      $('#display-report-year').text(yearVal);
+      
+      if (bldVal !== 'ALL') {
+        $('#display-report-building').text(bldVal);
+        $('#display-report-building-wrap').show();
+      } else {
+        $('#display-report-building-wrap').hide();
+      }
+
+      let filteredList = allExtinguishers;
+      if (bldVal !== 'ALL') {
+        filteredList = allExtinguishers.filter(function(x) { return x.building === bldVal; });
+      }
+
+      filteredList.sort(function(a, b) {
+         if (a.building < b.building) return -1;
+         if (a.building > b.building) return 1;
+         if (a.floor < b.floor) return -1;
+         if (a.floor > b.floor) return 1;
+         return (a.id || '').localeCompare(b.id || '');
+      });
+
+      const tbody = $('#report-tbody');
+      tbody.empty();
+
+      if(filteredList.length === 0) {
+         tbody.append('<tr><td colspan="13" class="text-center py-4 text-muted">ไม่พบข้อมูลถังดับเพลิงในระบบ</td></tr>');
+         return;
+      }
+
+      filteredList.forEach(function(item, index) {
+        let isReady = (item.status === 'พร้อมใช้');
+        let markIcon = isReady ? '<span class="check-pass">✓</span>' : '<span class="check-fail">✗</span>';
+        let resText = isReady ? 'ปกติ' : 'ชำรุด';
+        
+        let remark = '';
+        if (item.status === 'ต้องซ่อม') remark = 'รอดำเนินการซ่อม';
+        if (item.status === 'หมดอายุ') remark = 'น้ำยาหมดอายุ';
+
+        let tr = `<tr>
+          <td contenteditable="true">${index + 1}</td>
+          <td class="text-start" contenteditable="true">${item.building || '-'}</td>
+          <td contenteditable="true">${item.floor || '-'}</td>
+          <td contenteditable="true"><strong>${item.id || '-'}</strong><br><small style="color: #64748b; font-size: 11px;">${item.serial_number || '-'}</small></td>
+          <td contenteditable="true">${item.type || '-'}<br><span style="font-size: 11px;">${item.size || '-'}</span></td>
+          <td contenteditable="true">${markIcon}</td>
+          <td contenteditable="true">${markIcon}</td>
+          <td contenteditable="true">${markIcon}</td>
+          <td contenteditable="true">${markIcon}</td>
+          <td contenteditable="true">${markIcon}</td>
+          <td class="${isReady ? '' : 'fw-bold text-danger'}" contenteditable="true">${resText}</td>
+          <td contenteditable="true"></td>
+          <td class="text-danger" style="font-size: 12px;" contenteditable="true">${remark}</td>
+        </tr>`;
+        
+        tbody.append(tr);
+      });
+    }
+
+    function loadFireExtinguishers() {
+      if (!window.google || !window.google.script || !window.google.script.run) return;
+      window.google.script.run.withSuccessHandler(function(list) { renderFireExtinguishersTable(list); }).getAllFireExtinguishers();
+    }
+
+    function renderFireExtinguishersTable(list) {
+      allExtinguishers = list || []; const selectTank = $('#inspect-select-tank'); selectTank.empty(); selectTank.append('<option value="">-- กรุณาเลือกถังดับเพลิง --</option>');
+      const tbody = $('#fire-table tbody'); tbody.empty();
+      allExtinguishers.forEach(function(item) {
+        selectTank.append('<option value="' + item.id + '">' + item.id + ' - ' + (item.serial_number || '') + ' (' + (item.building || '') + ')</option>');
+        var sb = '<span class="badge bg-secondary">' + item.status + '</span>';
+        if (item.status === 'พร้อมใช้') sb = '<span class="badge bg-success">พร้อมใช้</span>'; else if (item.status === 'ต้องซ่อม') sb = '<span class="badge bg-warning">ต้องซ่อม</span>'; else if (item.status === 'หมดอายุ') sb = '<span class="badge bg-danger">หมดอายุ</span>';
+        
+        var cb = '<button class="btn btn-sm btn-outline-success me-1" onclick="showInspectNow(\'' + item.id + '\')" title="ตรวจประเมินถัง"><i class="fa-solid fa-clipboard-check"></i></button>';
+        cb += '<button class="btn btn-sm btn-outline-primary me-1" onclick="showQrCodeModal(\'' + item.id + '\')" title="ดูป้าย QR Code"><i class="fa-solid fa-qrcode"></i></button>';
+        
+        if (activeUser && activeUser.role === 'Admin') { cb += '<button class="btn btn-sm btn-outline-warning me-1" onclick="openEditFireModal(\'' + item.id + '\')"><i class="fa-solid fa-edit"></i></button><button class="btn btn-sm btn-outline-danger" onclick="deleteFire(\'' + item.id + '\')"><i class="fa-solid fa-trash"></i></button>'; }
+        tbody.append('<tr><td><strong>' + (item.id || '') + '</strong></td><td>' + (item.serial_number || '') + '</td><td>' + (item.type || '') + '</td><td>' + (item.size || '') + '</td><td>' + (item.building || '') + ' ชั้น ' + (item.floor || '1') + '</td><td>' + (item.expire_date || '') + '</td><td>' + sb + '</td><td>' + cb + '</td></tr>');
+      });
+      
+      try {
+        if ($.fn.DataTable.isDataTable('#fire-table')) $('#fire-table').DataTable().destroy();
+        $('#fire-table').DataTable({ 
+          language: thaiLanguageTranslation, 
+          responsive: true 
+        });
+      } catch (err) {
+        console.warn("DataTables initialization bypassed for fire-table:", err);
+      }
+    }
+
+    $('#btn-add-fire').click(function() { $('#fire-form')[0].reset(); $('#form-fire-id').val(''); $('#fireModalTitle').text('เพิ่มถังดับเพลิง'); $('#fireModal').modal('show'); });
+    
+    function openEditFireModal(id) {
+      const item = allExtinguishers.find(function(x) { return x.id === id; });
+      if (item) {
+        $('#form-fire-id').val(item.id); $('#form-serial').val(item.serial_number); $('#form-type').val(item.type); $('#form-size').val(item.size); 
+        $('#form-building-select').val(item.building); $('#form-floor').val(item.floor); $('#form-lat').val(item.lat); $('#form-lng').val(item.lng); $('#form-expire').val(item.expire_date);
+        $('#fireModalTitle').text('แก้ไขถัง : ' + item.id); $('#fireModal').modal('show');
+      }
+    }
+
+    function submitFireForm() {
+      const data = { id: $('#form-fire-id').val(), serial_number: $('#form-serial').val(), type: $('#form-type').val(), size: $('#form-size').val(), building: $('#form-building-select').val(), floor: $('#form-floor').val(), lat: $('#form-lat').val(), lng: $('#form-lng').val(), expire_date: $('#form-expire').val(), status: 'พร้อมใช้' };
+      if (!data.building) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกอาคาร', 'warning'); return; }
+      Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: function() { Swal.showLoading(); } });
+      if (window.google && window.google.script && window.google.script.run) {
+        window.google.script.run.withSuccessHandler(function() { Swal.fire('สำเร็จ', 'บันทึกเรียบร้อย', 'success'); $('#fireModal').modal('hide'); loadDashboardData(); loadFireExtinguishers(); }).saveFireExtinguisher(data);
+      } else { 
+        Swal.fire('ข้อผิดพลาด', 'ไม่พบการติดต่อ Google Script เซิร์ฟเวอร์', 'error'); 
+      }
+    }
+
+    function deleteFire(id) { 
+      Swal.fire({ title: 'ยืนยันลบถัง?', text: id, icon: 'warning', showCancelButton: true, confirmButtonText: 'ลบ' }).then(function(r) { 
+        if (r.isConfirmed && window.google && window.google.script && window.google.script.run) { 
+          window.google.script.run.withSuccessHandler(function() { loadDashboardData(); loadFireExtinguishers(); }).deleteFireExtinguisher(id); 
+        } 
+      }); 
+    }
+
+    function showInspectNow(id) { $('#inspect-select-tank').val(id).trigger('change'); switchTab('inspection-tab', $('.sidebar-menu a').get(2)); }
+    function onSelectInspectTank(id) { const sel = allExtinguishers.find(function(x) { return x.id === id; }); if (sel) { $('#inspect-location-text').val((sel.building || '') + ' ชั้น ' + (sel.floor || '1')); } }
+    function convertImageToBase64(fileId, hiddenId) { const f = document.getElementById(fileId).files[0]; if (f) { const r = new FileReader(); r.onloadend = function() { document.getElementById(hiddenId).value = r.result; }; r.readAsDataURL(f); } }
+    
+    function submitInspectionForm() {
+      if (!$('#inspect-select-tank').val() && !$('#inspect-select-tank').prop('disabled')) {
+         return Swal.fire('แจ้งเตือน', 'โปรดเลือกถังที่จะส่งตรวจ', 'warning');
+      }
+      
+      const selectedId = $('#inspect-select-tank').val();
+      Swal.fire({ title: 'กำลังบันทึกข้อมูล...', allowOutsideClick: false, didOpen: function() { Swal.showLoading(); } });
+      var sig = isSignaturePadBlank() ? "" : canvas.toDataURL();
+      
+      try {
+        if (navigator.geolocation) { 
+          navigator.geolocation.getCurrentPosition( 
+            function(p) { proceedWithInspection(sig, p.coords.latitude + "," + p.coords.longitude, selectedId); }, 
+            function() { proceedWithInspection(sig, "15.1843,100.1245", selectedId); },
+            { timeout: 3000 }
+          ); 
+        } else { 
+          proceedWithInspection(sig, "15.1843,100.1245", selectedId); 
+        }
+      } catch (geoError) {
+        console.warn("Geolocation blocked by iframe sandbox:", geoError);
+        proceedWithInspection(sig, "15.1843,100.1245", selectedId); 
+      }
+    }
+    
+    function proceedWithInspection(sig, gps, selectedId) {
+      const img = $('#photo_before_b64').val();
+      if (img && window.google && window.google.script && window.google.script.run) { 
+        window.google.script.run.withSuccessHandler(function(url) { 
+           saveInspectionData(sig, url, gps, selectedId); 
+        }).uploadImageToDrive(img, "INS.jpg"); 
+      } else { 
+        saveInspectionData(sig, "", gps, selectedId); 
+      }
+    }
+    
+    function saveInspectionData(sig, imgUrl, gps, selectedId) {
+      const payload = { 
+         fire_extinguisher_id: selectedId, 
+         gauge_pressure: $('#check-pressure').is(':checked'), 
+         safety_pin: $('#check-pin').is(':checked'), 
+         hose_nozzle: $('#check-hose').is(':checked'), 
+         body_rust: $('#check-rust').is(':checked'), 
+         cleanliness_barrier: $('#check-clean').is(':checked'), 
+         status_checked: $('#inspect-result-status').val(), 
+         photo_before_url: imgUrl, 
+         signature_url: sig, 
+         gps_location: gps, 
+         score: calculateScore() 
+      };
+      
+      if (window.google && window.google.script && window.google.script.run) { 
+        window.google.script.run.withSuccessHandler(function() { 
+          handleInspectionSuccess(selectedId);
+        }).submitInspection(payload); 
+      } else { 
+        Swal.fire('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อเพื่อจัดเก็บข้อมูลในระบบคลาวด์', 'error');
+      }
+    }
+
+    function handleInspectionSuccess(selectedId) {
+       Swal.fire({
+         title: 'บันทึกสำเร็จ!',
+         text: 'ขอบคุณที่ร่วมบันทึกผลการตรวจสอบถังดับเพลิงรหัส ' + selectedId,
+         icon: 'success',
+         confirmButtonColor: '#006C45'
+       }).then(function() {
+         const params = new URLSearchParams(window.location.search);
+         if (params.get('id')) {
+           $('#app-container').html(`
+             <div class="container py-5 text-center">
+               <div class="glass-card p-5 mx-auto text-dark" style="max-width: 500px; margin-top: 10vh; background-color: #ffffff; border-top: 5px solid var(--accent-color);">
+                 <div style="background-color: var(--primary-color); width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; box-shadow: 0 4px 15px rgba(0,108,69,0.3); border: 2.5px solid var(--accent-color);">
+                   <i class="fa-solid fa-check text-white" style="font-size: 2.5rem;"></i>
+                 </div>
+                 <h3 class="fw-bold mb-2" style="color: var(--primary-color);">ดำเนินการเสร็จสิ้น</h3>
+                 <p class="text-secondary">ข้อมูลรายงานการตรวจสอบของถังรหัส <b>${selectedId}</b> ถูกนำส่งเข้าระบบจัดการส่วนกลาง BCNChainat Fire Guard เรียบร้อยแล้ว</p>
+                 <hr class="my-4" style="border-top: 2px dashed #ddd;">
+                 <p class="small text-muted mb-0">ท่านสามารถปิดหน้าต่างเบราว์เซอร์นี้ในโทรศัพท์มือถือของท่านได้ทันที</p>
+               </div>
+             </div>
+           `);
+         } else {
+           $('#inspection-form')[0].reset(); 
+           clearSignature(); 
+           loadDashboardData(); 
+           loadFireExtinguishers();
+         }
+       });
+    }
+
+    function calculateScore() { let s = 100; if (!$('#check-pressure').is(':checked')) s -= 20; if (!$('#check-pin').is(':checked')) s -= 20; if (!$('#check-hose').is(':checked')) s -= 20; if (!$('#check-rust').is(':checked')) s -= 20; if (!$('#check-clean').is(':checked')) s -= 20; return s; }
+
+    function setupSignaturePad() {
+      canvas = document.getElementById('signature-pad'); if (!canvas) return; ctx = canvas.getContext('2d');
+      function getPos(e) { const r = canvas.getBoundingClientRect(); var cx = e.touches ? e.touches[0].clientX : e.clientX; var cy = e.touches ? e.touches[0].clientY : e.clientY; return { x: cx - r.left, y: cy - r.top }; }
+      canvas.addEventListener('mousedown', function(e) { isDrawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
+      canvas.addEventListener('mousemove', function(e) { if (isDrawing) { const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.strokeStyle = '#006C45'; ctx.lineWidth = 3; ctx.stroke(); } });
+      canvas.addEventListener('mouseup', function() { isDrawing = false; });
+      canvas.addEventListener('touchstart', function(e) { isDrawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); if (e.cancelable) e.preventDefault(); }, { passive: false });
+      canvas.addEventListener('touchmove', function(e) { if (isDrawing) { const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.strokeStyle = '#006C45'; ctx.lineWidth = 3; ctx.stroke(); if (e.cancelable) e.preventDefault(); } }, { passive: false });
+      canvas.addEventListener('touchend', function() { isDrawing = false; });
+    }
+    
+    function clearSignature() { if (ctx) { ctx.clearRect(0, 0, canvas.width, canvas.height); } }
+    function isSignaturePadBlank() { if (!canvas) return true; const b = document.createElement('canvas'); b.width = canvas.width; b.height = canvas.height; return canvas.toDataURL() === b.toDataURL(); }
+    function resizeCanvas() { if (!canvas) return; const r = Math.max(window.devicePixelRatio || 1, 1); canvas.width = (canvas.offsetWidth || 350) * r; canvas.height = (canvas.offsetHeight || 200) * r; ctx.scale(r, r); }
+
+    function generateDynamicBlueprint() {
+      let activeBuildings = allBuildings.filter(function(b) { return b.status === 'Active'; });
+      if (!activeBuildings || activeBuildings.length === 0) return null;
+      
+      let cols = 3; 
+      let boxWidth = 280;
+      let boxHeight = 150;
+      let gapX = 40;
+      let gapY = 40;
+      let margin = 60;
+      
+      let rows = Math.ceil(activeBuildings.length / cols);
+      let actualCols = Math.min(activeBuildings.length, cols);
+      
+      let totalWidth = margin * 2 + actualCols * boxWidth + (actualCols > 1 ? (actualCols - 1) * gapX : 0);
+      let totalHeight = margin * 2 + rows * boxHeight + (rows > 1 ? (rows - 1) * gapY : 0);
+      
+      totalWidth = Math.max(totalWidth, 800);
+      totalHeight = Math.max(totalHeight, 500);
+      
+      let svgStr = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + totalWidth + ' ' + totalHeight + '" width="' + totalWidth + '" height="' + totalHeight + '">' +
+                   '<rect width="100%" height="100%" fill="#f1f5f9" />';
+                   
+      activeBuildings.forEach(function(b, index) {
+          let col = index % cols;
+          let row = Math.floor(index / cols);
+          let x = margin + col * (boxWidth + gapX);
+          let y = margin + row * (boxHeight + gapY);
+          
+          svgStr += '<rect x="' + x + '" y="' + y + '" width="' + boxWidth + '" height="' + boxHeight + '" fill="#ffffff" stroke="#006C45" stroke-width="4" rx="10" />';
+          
+          // ตกแต่งกรอบทองแบบสง่างาม
+          svgStr += '<rect x="' + (x+6) + '" y="' + (y+6) + '" width="' + (boxWidth-12) + '" height="' + (boxHeight-12) + '" fill="none" stroke="#EAB308" stroke-dasharray="4" stroke-width="1.5" rx="6" />';
+          
+          let fontSize = b.name.length > 20 ? 16 : 20;
+          svgStr += '<text x="' + (x + boxWidth/2) + '" y="' + (y + boxHeight/2 + 6) + '" fill="#006C45" font-size="' + fontSize + '" font-family="sans-serif" text-anchor="middle" font-weight="bold">' + b.name + '</text>';
+          
+          b.rectX = x;
+          b.rectY = y;
+          b.svgX = x + boxWidth/2;
+          b.svgY = y + boxHeight/2;
+      });
+      
+      svgStr += '</svg>';
+      
+      return {
+         svgBase64: 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr))),
+         width: totalWidth,
+         height: totalHeight
+      };
+    }
+
+    function initLeafletMap() {
+      if (!mapInstance) {
+        mapInstance = L.map('map', { crs: L.CRS.Simple, minZoom: -2, maxZoom: 2, attributionControl: false });
+      }
+      
+      if (markerGroup) {
+        markerGroup.clearLayers();
+      } else {
+        markerGroup = L.layerGroup().addTo(mapInstance);
+      }
+
+      currentBlueprint = generateDynamicBlueprint();
+      if (!currentBlueprint) return;
+
+      if (currentBlueprintOverlay) {
+        mapInstance.removeLayer(currentBlueprintOverlay);
+      }
+
+      currentBlueprintOverlay = L.imageOverlay(currentBlueprint.svgBase64, [[0, 0], [currentBlueprint.height, currentBlueprint.width]]).addTo(mapInstance);
+      mapInstance.setView([currentBlueprint.height / 2, currentBlueprint.width / 2], -1);
+
+      allExtinguishers.forEach(function(item) {
+        let svg_y = parseFloat(item.lat);
+        let svg_x = parseFloat(item.lng);
+        
+        let bld = allBuildings.find(function(b) { return b.name === item.building; });
+
+        let isGPS = (svg_x > 90 && svg_x < 110);
+        let isAbsolute = (svg_x > 280 || svg_y > 150 || svg_x <= 0 || svg_y <= 0);
+
+        if (isGPS || isAbsolute) {
+           svg_y = 75 + Math.round(Math.random() * 40 - 20);
+           svg_x = 140 + Math.round(Math.random() * 60 - 30);
+        }
+        
+        if (bld && bld.rectX !== undefined && bld.rectY !== undefined) {
+           let abs_x = bld.rectX + svg_x;
+           let abs_y = bld.rectY + svg_y;
+
+           let leaflet_lat = currentBlueprint.height - abs_y;
+           let leaflet_lng = abs_x;
+           
+           if (!isNaN(leaflet_lat) && !isNaN(leaflet_lng)) {
+             var color = '#9ca3af';
+             if (item.status === 'พร้อมใช้') color = '#006C45';      
+             else if (item.status === 'ต้องซ่อม') color = '#EAB308'; 
+             else if (item.status === 'หมดอายุ') color = '#DC2626'; 
+             
+             var iconHtml = '<div style="position: relative; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: ' + color + ';">' +
+                            '<div class="pulse-glow" style="background-color: ' + color + '; opacity: 0.35;"></div>' +
+                            '<i class="fa-solid fa-fire-extinguisher" style="font-size: 24px; z-index: 2; filter: drop-shadow(0px 3px 4px rgba(0,0,0,0.8));"></i>' +
+                            '</div>';
+                            
+             var icon = L.divIcon({ className: 'border-0 bg-transparent', html: iconHtml, iconSize: [28, 28], iconAnchor: [14, 14] });
+             
+             var popupHtml = '<div class="text-center p-2">' +
+                             '<b class="d-block mb-1" style="color: var(--primary-color); font-size: 1.1rem;">' + item.id + '</b>' +
+                             '<span class="d-block text-secondary mb-2">' + (item.building || '') + '<br>ชั้น ' + (item.floor || '1') + '</span>' +
+                             '<span class="badge w-100 py-2" style="background-color: ' + color + '; color: white; font-size: 0.85rem;">' + item.status + '</span>' +
+                             '</div>';
+                             
+             L.marker([leaflet_lat, leaflet_lng], { icon: icon }).bindPopup(popupHtml, { closeButton: false }).addTo(markerGroup);
+           }
+        }
+      });
+    }
+
+    function loadUsersTable() {
+      if (window.google && window.google.script && window.google.script.run) {
+        window.google.script.run.withSuccessHandler(function(u) {
+            const tbody = $('#users-tbody'); tbody.empty();
+            (u || []).forEach(function(x) {
+              var btnEdit = '<button class="btn btn-sm btn-outline-warning me-1" onclick="openEditUserModal(\'' + x.email + '\',\'' + x.name + '\',\'' + x.role + '\',\'' + x.status + '\')"><i class="fa-solid fa-edit"></i></button>';
+              var btnDel = '<button class="btn btn-sm btn-outline-danger" onclick="deleteUser(\'' + x.email + '\')"><i class="fa-solid fa-trash"></i></button>';
+              var tr = '<tr><td>' + x.email + '</td><td>' + x.name + '</td><td><span class="badge bg-success-subtle text-success">' + x.role + '</span></td><td><span class="badge bg-info-subtle text-info">' + x.status + '</span></td><td>' + btnEdit + btnDel + '</td></tr>';
+              tbody.append(tr);
+            });
+          }).getUsersList();
+      }
+    }
+
+    function openAddUserModal() { $('#user-form')[0].reset(); $('#user-email').prop('readonly', false); $('#userModal').modal('show'); }
+    function openEditUserModal(e, n, r, s) { $('#user-email').val(e).prop('readonly', true); $('#user-name').val(n); $('#user-role').val(r); $('#userModal').modal('show'); }
+    
+    function submitUserForm() {
+      const data = { email: $('#user-email').val(), name: $('#user-name').val(), role: $('#user-role').val(), status: 'Active' };
+      if (window.google && window.google.script && window.google.script.run) { 
+        window.google.script.run.withSuccessHandler(function() { Swal.fire('สำเร็จ', 'บันทึกสิทธิ์เรียบร้อย', 'success'); $('#userModal').modal('hide'); loadUsersTable(); }).saveUser(data); 
+      }
+    }
+
+    function deleteUser(e) {
+      Swal.fire({ title: 'ยืนยันลบสิทธิ์?', text: e, icon: 'warning', showCancelButton: true }).then(function(r) {
+        if (r.isConfirmed && window.google && window.google.script && window.google.script.run) { 
+          window.google.script.run.withSuccessHandler(function() { loadUsersTable(); }).deleteUser(e); 
+        }
+      });
+    }
+
+    function handleUrlParameters() {
+      if (window.google && window.google.script && window.google.script.url) {
+        window.google.script.url.getLocation(function(location) {
+          const tankId = location.parameter.id;
+          if (tankId) { applyQrRedirect(tankId); }
+        });
+      } else {
+        const params = new URLSearchParams(window.location.search);
+        const tankId = params.get('id');
+        if (tankId) { applyQrRedirect(tankId); }
+      }
+    }
+
+    function applyQrRedirect(tankId) {
+      const checkInterval = setInterval(function() {
+        if (allExtinguishers && allExtinguishers.length > 0) {
+          clearInterval(checkInterval);
+          const exists = allExtinguishers.some(function(x) { return x.id === tankId; });
+          if (exists) {
+            showInspectNow(tankId);
+            Swal.fire({
+              title: 'สแกน QR Code สำเร็จ!',
+              text: 'เข้าสู่หน้าจอกรอกข้อมูลตรวจถังดับเพลิงรหัส ' + tankId + ' แล้ว',
+              icon: 'success',
+              timer: 3500,
+              showConfirmButton: true,
+              confirmButtonColor: '#006C45'
+            });
+          } else {
+            Swal.fire('ตรวจไม่พบข้อมูล', 'ไม่พบถังดับเพลิงรหัส ' + tankId + ' ในฐานข้อมูลวิทยาลัยฯ', 'error');
+          }
+        }
+      }, 300);
+    }
+
+    function showQrCodeModal(id) {
+      const item = allExtinguishers.find(function(x) { return x.id === id; });
+      if (item) {
+        $('#qr-modal-tank-id').text(item.id);
+        $('#qr-modal-serial').text('Serial: ' + (item.serial_number || '-'));
+        $('#qr-modal-type').text(item.type || '-');
+        $('#qr-modal-size').text(item.size || '-');
+        $('#qr-modal-location').text(item.building + ' ชั้น ' + (item.floor || '1'));
+        
+        const scanUrl = webAppUrl + '?id=' + encodeURIComponent(item.id);
+        const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' + encodeURIComponent(scanUrl);
+        $('#qr-modal-img').attr('src', qrUrl);
+        $('#qrModal').modal('show');
+      }
+    }
+
+    // ฟังก์ชันพิมพ์ป้ายสติกเกอร์เดี่ยว ปลอดภัยจากปัญหาคอมไพล์แท็กปิด script บน Google
+    function printSingleQrLabel() {
+      const labelHtml = document.getElementById('qr-label-card').outerHTML;
+      const printWindow = window.open('', '_blank');
+      const htmlContent = '<html>' +
+        '<head>' +
+        '  <title>พิมพ์ป้ายถังดับเพลิง - BCNChainat Fire Guard</title>' +
+        '  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">' +
+        '  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">' +
+        '  <style>' +
+        '    body { font-family: "Sarabun", sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #fff; }' +
+        '    #qr-label-card {' +
+        '      border: 3px double #006C45 !important;' +
+        '      border-radius: 15px !important;' +
+        '      padding: 24px !important;' +
+        '      width: 300px;' +
+        '      text-align: center;' +
+        '      box-shadow: none !important;' +
+        '    }' +
+        '    .logo-title { display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: bold; color: #006C45; font-size: 18px; }' +
+        '    hr { border-top: 2px dashed #EAB308 !important; opacity: 0.8; margin: 12px 0; }' +
+        '    h4 { font-size: 24px !important; font-weight: bold; color: #006C45 !important; margin: 5px 0; }' +
+        '    p { margin: 5px 0; }' +
+        '    img { width: 180px !important; height: 180px !important; border: 1.5px solid #EAB308; padding: 5px; border-radius: 10px; }' +
+        '    .text-success { color: #006C45 !important; }' +
+        '    .text-danger { color: #dc2626 !important; }' +
+        '  </style>' +
+        '</head>' +
+        '<body>' +
+        labelHtml +
+        '<script>' +
+        '  window.onload = function() {' +
+        '    setTimeout(function() { window.print(); window.close(); }, 800);' +
+        '  };' +
+        '<' + '/script>' +
+        '</body>' +
+        '</html>';
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+    }
+
+    // พิมพ์ป้ายสติกเกอร์บาร์โค้ดรวมทุกล็อตของอาคาร
+    function printAllQrCodes() {
+      if (!allExtinguishers || allExtinguishers.length === 0) {
+        Swal.fire('แจ้งเตือน', 'ไม่พบข้อมูลถังดับเพลิงใดๆ ในฐานข้อมูลจริงของวิทยาลัย', 'warning');
+        return;
+      }
+      
+      const printWindow = window.open('', '_blank');
+      let html = '<html>' +
+        '<head>' +
+        '  <title>พิมพ์ป้าย QR Code ทั้งหมด - BCNChainat Fire Guard</title>' +
+        '  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">' +
+        '  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">' +
+        '  <style>' +
+        '    body { font-family: "Sarabun", sans-serif; background: #fff; margin: 0; padding: 20px; }' +
+        '    .grid-container {' +
+        '      display: grid;' +
+        '      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));' +
+        '      gap: 20px;' +
+        '    }' +
+        '    .label-card {' +
+        '      border: 3px double #006C45;' +
+        '      border-radius: 15px;' +
+        '      padding: 18px;' +
+        '      background: #fff;' +
+        '      text-align: center;' +
+        '      page-break-inside: avoid;' +
+        '    }' +
+        '    .logo-title {' +
+        '      display: flex;' +
+        '      align-items: center;' +
+        '      justify-content: center;' +
+        '      gap: 8px;' +
+        '      font-weight: bold;' +
+        '      color: #006C45;' +
+        '      font-size: 16px;' +
+        '    }' +
+        '    .tank-id {' +
+        '      font-size: 20px;' +
+        '      font-weight: bold;' +
+        '      color: #006C45;' +
+        '      margin: 5px 0 2px 0;' +
+        '    }' +
+        '    .serial {' +
+        '      font-size: 11px;' +
+        '      color: #666;' +
+        '      margin-bottom: 10px;' +
+        '    }' +
+        '    .qr-img {' +
+        '      width: 140px;' +
+        '      height: 140px;' +
+        '      border: 1.5px solid #EAB308;' +
+        '      padding: 3px;' +
+        '      border-radius: 8px;' +
+        '    }' +
+        '    .details {' +
+        '      font-size: 11px;' +
+        '      font-weight: bold;' +
+        '      margin-top: 10px;' +
+        '    }' +
+        '    .location {' +
+        '      font-size: 11px;' +
+        '      font-weight: bold;' +
+        '      color: #006C45;' +
+        '      margin-top: 5px;' +
+        '      text-overflow: ellipsis;' +
+        '      white-space: nowrap;' +
+        '      overflow: hidden;' +
+        '    }' +
+        '    @media print {' +
+        '      body { padding: 0; }' +
+        '      .grid-container { gap: 15px; }' +
+        '    }' +
+        '  </style>' +
+        '</head>' +
+        '<body>' +
+        '  <div class="grid-container">';
+
+      allExtinguishers.forEach(function(item) {
+        const scanUrl = webAppUrl + '?id=' + encodeURIComponent(item.id);
+        const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(scanUrl);
+        html += '<div class="label-card">' +
+          '  <div class="logo-title">' +
+          '    <i class="fa-solid fa-fire-extinguisher" style="color: #dc2626;"></i>' +
+          '    <span style="color: #006C45;">BCNCHAINAT FIRE GUARD</span>' +
+          '  </div>' +
+          '  <hr style="border-top: 1.5px dashed #EAB308; opacity: 0.8; margin: 8px 0;">' +
+          '  <div class="tank-id">' + item.id + '</div>' +
+          '  <div class="serial">Serial: ' + (item.serial_number || '-') + '</div>' +
+          '  <div><img class="qr-img" src="' + qrUrl + '" alt="QR"></div>' +
+          '  <div class="details">ชนิด: ' + (item.type || '-') + ' (' + (item.size || '-') + ' ปอนด์)</div>' +
+          '  <div class="location"><i class="fa-solid fa-location-dot"></i> ' + (item.building || '-') + ' ชั้น ' + (item.floor || '1') + '</div>' +
+          '</div>';
+      });
+
+      html += '  </div>' +
+        '<script>' +
+        '  window.onload = function() { ' +
+        '    setTimeout(function() { window.print(); window.close(); }, 1200);' +
+        '  };' +
+        '<' + '/script>' +
+        '</body>' +
+        '</html>';
+
+      printWindow.document.write(html);
+      printWindow.document.close();
+    }
+
+  </script>
+</body>
+</html>
